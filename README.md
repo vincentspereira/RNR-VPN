@@ -60,22 +60,32 @@ which both broadband lines use.
 
 ## 3. How it works (architecture)
 
+```mermaid
+flowchart TB
+  subgraph LDN["London flat"]
+    CF["Community Fibre broadband<br/>(CGNAT - no public IPv4)"]
+    Pi["Raspberry Pi 5 - HUB<br/>Tailscale: UK exit node + LAN subnet router<br/>Pi-hole v6 + Unbound - ad-block + private DNS<br/>Docker, monitoring, dashboard, hardening"]
+  end
+  subgraph MUM["Mumbai home"]
+    SP["Spearhead India broadband<br/>(residential IP)"]
+    Lap["Old laptop, Windows<br/>Tailscale: INDIA exit node<br/>always-on, lid closed"]
+  end
+  TS(("Tailscale control plane<br/>+ DERP relays"))
+  Dev["Family devices<br/>phones, laptops, TV"]
+  Pi --> CF
+  Lap --> SP
+  CF -.-> TS
+  SP -.-> TS
+  Dev -.-> TS
+  Pi ---|WireGuard mesh| Lap
+  Dev -->|use London exit| Pi
+  Dev -->|use India exit| Lap
 ```
-   LONDON FLAT                          MUMBAI HOME
-   Community Fibre (CGNAT, fine)        Spearhead India broadband
-        |                                    |
-   [Pi 5]                              [old laptop, always on]
-   - Tailscale: UK exit node +          - Tailscale: INDIA exit node
-     LAN subnet router                   - residential IP => OTT works
-   - Pi-hole v6 + Unbound (ad/DNS)     - nothing else needed
-   - monitoring / dashboard
-   - hardening (keys, fail2ban, auto-updates)
-        |
-   all family devices join the free Tailscale mesh; each picks an exit node:
-     - Indian OTT / India sites  -> Mumbai exit node
-     - UK IP / reach London LAN  -> London (Pi) exit node
-     - just ad-blocking          -> no exit node (Pi-hole DNS still applies)
-```
+
+_Figure 1 - System topology: a two-site Tailscale mesh. Both sites sit behind NAT
+(Community Fibre CGNAT in London, Spearhead in Mumbai); Tailscale coordinates the
+mesh and relays traffic if no direct UDP path can be punched through. Every family
+device joins the mesh and picks an exit node on demand (see section 10)._
 
 ---
 
@@ -204,6 +214,42 @@ the app:
 - To use a UK IP or reach the London home: pick the **London (Pi)** exit node.
 - For normal browsing with ad-blocking but no location change: turn the exit
   node **off**. Pi-hole ad-blocking still applies to all traffic on the mesh.
+
+How a switch looks in practice:
+
+```mermaid
+sequenceDiagram
+  participant You
+  participant App as Tailscale app
+  participant Mesh as Tailnet
+  participant Mum as Mumbai laptop
+  participant Pi as London Pi
+  You->>App: open Tailscale
+  You->>App: choose Use exit node
+  alt Mumbai exit
+    App->>Mesh: route all traffic via Mumbai laptop
+    Mum-->>App: egress from residential Indian IP
+    Note over App,Mum: use FULL tunnel for OTT - Jio checks IP + region on the stream
+  else London Pi exit
+    App->>Mesh: route via London Pi
+    Pi-->>App: egress from UK IP + reach London LAN
+  else exit OFF
+    App->>Mesh: no exit node selected
+    Note over App: Pi-hole DNS still ad-blocks all traffic
+  end
+```
+
+Which exit node to pick for a given task:
+
+```mermaid
+flowchart TD
+  S(["Device wants to reach a site or stream"]) --> Q1{"India OTT or India-only site?<br/>JioHotstar, Airtel Xstream, HP Gas"}
+  Q1 -->|yes| M["Use MUMBAI exit node - full tunnel"]
+  Q1 -->|no| Q2{"UK IP or reach London home LAN?"}
+  Q2 -->|yes| L["Use LONDON Pi exit node"]
+  Q2 -->|no| Q3{"Just want ad-blocking, no location change?"}
+  Q3 -->|yes| O["Exit node OFF - Pi-hole DNS still applies"]
+```
 
 ---
 

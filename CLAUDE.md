@@ -9,7 +9,8 @@ progress). Current blocker: SSH access to the London Pi to start Phase 1.
 
 ## Read these first
 - `README.md` - user-facing overview: goals, cost, roadmap, caveats.
-- `ARCHITECTURE.md` - full design, locked decisions, build-phase checklist.
+- `ARCHITECTURE.md` - full design, locked decisions, build-phase checklist, and
+  Mermaid architecture / workflow diagrams (section 9).
 - `docs/MUMBAI-SETUP.md` - plain-language runbook for the Mumbai helper.
 - `docs/ISP-PARTNER-REQUEST.md` - what to ask the Spearhead (Mumbai) ISP partner.
 

@@ -33,22 +33,32 @@ B) Indian OTT blocks all datacenter/VPS/commercial-VPN IPs. Only a RESIDENTIAL
 
 Architecture:
 
-   LONDON FLAT                          MUMBAI HOME
-   Community Fibre (CGNAT, fine)        Spearhead India broadband (~50 Mbps,
-                                        upgradable; business partner can provide
-                                        what's needed)
-        |                                    |
-   [Pi 5]                              [old laptop, always on]
-   - Tailscale: UK exit node +          - Tailscale: INDIA exit node
-     LAN subnet router                   - residential IP => OTT works
-   - Pi-hole v6 + Unbound (ad/DNS)     - nothing else needed
-   - monitoring / dashboard
-   - hardening (keys, fail2ban, auto-updates)
-        |
-   all 9 devices join the free Tailscale mesh; each picks an exit node:
-     - Indian OTT / India sites  -> Mumbai exit node
-     - UK IP / reach London LAN  -> London (Pi) exit node
-     - just ad-blocking          -> no exit node (Pi-hole DNS still applies)
+```mermaid
+flowchart TB
+  subgraph LDN["London flat"]
+    CF["Community Fibre broadband<br/>(CGNAT - no public IPv4)"]
+    Pi["Raspberry Pi 5 - HUB<br/>Tailscale: UK exit node + LAN subnet router<br/>Pi-hole v6 + Unbound - ad-block + private DNS<br/>Docker, monitoring, dashboard, hardening"]
+  end
+  subgraph MUM["Mumbai home"]
+    SP["Spearhead India broadband (~50 Mbps)<br/>(residential IP)"]
+    Lap["Old laptop, Windows<br/>Tailscale: INDIA exit node<br/>always-on, lid closed"]
+  end
+  TS(("Tailscale control plane<br/>+ DERP relays"))
+  Dev["All 9 family devices<br/>phones, laptops, TV"]
+  Pi --> CF
+  Lap --> SP
+  CF -.-> TS
+  SP -.-> TS
+  Dev -.-> TS
+  Pi ---|WireGuard mesh| Lap
+  Dev -->|use London exit| Pi
+  Dev -->|use India exit| Lap
+```
+
+_Figure 1 - System topology (two-site Tailscale mesh). Each device picks an exit
+node: India OTT / India sites -> Mumbai; UK IP / London LAN -> London (Pi);
+ad-blocking only -> no exit node (Pi-hole DNS still applies). Detailed views in
+section 9._
 
 Cost: GBP 0/month. Tailscale free Personal = 6 users + unlimited devices (fits
 4 users / 9 devices). All other software is FOSS.
@@ -63,6 +73,8 @@ London Pi 5 (Raspberry Pi OS Bookworm 64-bit - to confirm):
 - Monitoring: Uptime Kuma + Netdata (optional, "maximum features")
 - Homepage dashboard (optional)
 - Hardening: SSH key-only, fail2ban, unattended-upgrades
+
+Visual: see Figure 2 (section 9) for the full service-stack diagram.
 
 Mumbai old laptop (Windows):
 - Tailscale only, advertised as exit node. See docs/MUMBAI-SETUP.md.
@@ -106,6 +118,8 @@ Running cost: GBP 0/month. Optional anonymity layer is the only possible spend.
 ------------------------------------------------------------------------------
 ## 7. Build phases (checklist)
 ------------------------------------------------------------------------------
+Visual summary: see Figure 7 in section 9.
+
 Phase 0 - Planning & decisions [DONE]
   [x] Research architecture
   [x] Identify CGNAT + OTT constraints
@@ -149,3 +163,124 @@ Phase 4 - Hardening & polish
   tunnel (not DNS-only), because Jio checks IP + region on the stream itself.
 - VPN/OTT use may conflict with OTT terms of service; this is the user's own
   paid subscriptions on their own residential IP.
+
+------------------------------------------------------------------------------
+## 9. Architecture & workflow diagrams (Mermaid)
+------------------------------------------------------------------------------
+These diagrams render on GitHub. Figure 1 (system topology) is inline in
+section 2; the views below expand it - component stack, DNS chain, mesh
+formation, routing decision, OTT streaming path, and the build roadmap.
+
+### Figure 2 - London Pi component & service stack
+
+```mermaid
+flowchart TB
+  Internet(("Internet / DNS root"))
+  subgraph Pi5["Raspberry Pi 5 - Raspberry Pi OS Bookworm 64-bit"]
+    TS["Tailscale<br/>WireGuard mesh, UK exit node,<br/>LAN subnet router, MagicDNS"]
+    subgraph DK["Docker + Compose"]
+      PH["Pi-hole v6 - ad/tracker blocking"]
+      UB["Unbound - recursive DNS resolver"]
+      KU["Uptime Kuma - uptime monitoring"]
+      ND["Netdata - system metrics"]
+      HP["Homepage - dashboard"]
+    end
+    SSH["sshd - key-only auth"]
+    F2B["fail2ban"]
+    UP["unattended-upgrades"]
+  end
+  Clients(["Tailnet clients"]) --> TS
+  TS -->|tailnet DNS| PH
+  PH -->|forward| UB
+  UB -->|recursive resolve| Internet
+```
+
+### Figure 3 - DNS resolution + ad-blocking chain
+
+```mermaid
+sequenceDiagram
+  participant C as Client device
+  participant TS as Tailscale MagicDNS
+  participant PH as Pi-hole v6
+  participant UB as Unbound
+  participant R as DNS root servers
+  C->>TS: query ads.tracker.com
+  TS->>PH: forward - tailnet DNS is Pi-hole
+  alt on blocklist
+    PH-->>C: return 0.0.0.0 - ad dropped
+  else allowed domain example.com
+    PH->>UB: resolve example.com
+    UB->>R: iterative lookup
+    R-->>UB: IP answer
+    UB-->>PH: IP address
+    PH-->>C: IP address - no leak to ISP or Google
+  end
+```
+
+### Figure 4 - CGNAT traversal / mesh formation
+
+```mermaid
+sequenceDiagram
+  participant Pi as London Pi
+  participant Lap as Mumbai laptop
+  participant CP as Tailscale control plane
+  participant DERP as DERP relay
+  Pi->>CP: login - advertise UK exit + LAN subnet
+  Lap->>CP: login - advertise India exit
+  CP-->>Pi: peer list + discovered endpoints
+  CP-->>Lap: peer list + discovered endpoints
+  Pi->>Lap: NAT traversal - STUN / UDP hole-punch
+  alt direct UDP path established
+    Pi->>Lap: direct WireGuard tunnel - preferred
+  else both behind CGNAT or blocked
+    Pi->>DERP: relay connect
+    Lap->>DERP: relay connect
+    DERP-->>Pi: relayed WireGuard - still E2E encrypted
+  end
+```
+
+### Figure 5 - Traffic routing decision (which exit node)
+
+```mermaid
+flowchart TD
+  S(["Device wants to reach a site or stream"]) --> Q1{"India OTT or India-only site?<br/>JioHotstar, Airtel Xstream, HP Gas"}
+  Q1 -->|yes| M["Use MUMBAI exit node - full tunnel"]
+  Q1 -->|no| Q2{"UK IP or reach London home LAN?"}
+  Q2 -->|yes| L["Use LONDON Pi exit node"]
+  Q2 -->|no| Q3{"Just want ad-blocking, no location change?"}
+  Q3 -->|yes| O["Exit node OFF - Pi-hole DNS still applies"]
+```
+
+### Figure 6 - OTT streaming path (London watches via Mumbai)
+
+```mermaid
+sequenceDiagram
+  participant You
+  participant D as London device
+  participant Lap as Mumbai laptop
+  participant Jio as JioHotstar
+  You->>D: play title - exit node is Mumbai
+  D->>Lap: full-tunnel via WireGuard
+  Lap->>Jio: HTTPS from residential Indian IP
+  Jio->>Jio: geo-check - residential India IP + region PASS
+  Jio-->>Lap: video stream
+  Lap-->>D: stream over WireGuard
+  D-->>You: 1080p / 4K playback
+  Note over Lap: quality capped by Mumbai UPLOAD speed - 1080p ~8 Mbps, 4K ~25 Mbps
+```
+
+### Figure 7 - Build phase roadmap
+
+```mermaid
+flowchart LR
+  P0["Phase 0 - DONE<br/>research + architecture +<br/>Mumbai runbook + ISP list"]
+  P1["Phase 1 - London Pi<br/>BLOCKER: SSH access to Pi"]
+  P2["Phase 2 - clients"]
+  P3["Phase 3 - Mumbai exit"]
+  P4["Phase 4 - hardening + polish"]
+  P0 --> P1 --> P2 --> P3 --> P4
+  classDef done fill:#d4edda,stroke:#28a745,color:#000
+  classDef now fill:#fff3cd,stroke:#ffc107,color:#000
+  class P0 done
+  class P1 now
+```

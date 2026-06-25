@@ -21,6 +21,15 @@ The laptop must:
 
 Once set up it mostly looks after itself.
 
+The 4 steps at a glance:
+
+```mermaid
+flowchart LR
+  A["STEP 1<br/>Make the laptop<br/>stay on forever"] --> B["STEP 2<br/>Install the<br/>Tailscale program"]
+  B --> C["STEP 3<br/>Run the ONE command<br/>(Vincent on call)"]
+  C --> D["STEP 4<br/>Tell Vincent,<br/>keep it running"]
+```
+
 ------------------------------------------------------------------------------
 BEFORE YOU START
 ------------------------------------------------------------------------------
