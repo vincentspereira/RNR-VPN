@@ -1,8 +1,12 @@
 # RNR-VPN - Project Notes for Claude Code
 
 Self-hosted, near-zero-cost personal VPN mesh spanning a London flat and a Mumbai
-home. Product / project name: **RNR-VPN** (hyphenated). Repo folder: `RNR VPN`
-(spaced). These are intentionally different - do NOT "fix" one to match the other.
+home. Product / project name: **RNR-VPN** (hyphenated). Repo folder is also
+`RNR-VPN` (hyphenated) - both match. History: on 2026-07-14 this repo was moved
+from Windows (C:\Users\vince\Projects\RNR VPN, with a space) to WSL2/Ubuntu
+(/home/vincentspereira/Projects/RNR-VPN, hyphenated), and the folder was renamed
+to match the project name. The old "spaced folder on purpose" convention no longer
+applies - do not reintroduce the space.
 
 Owner: Vincent S. Pereira. Status: building (planning complete, deployment in
 progress). Current blocker: SSH access to the London Pi to start Phase 1.
@@ -45,7 +49,7 @@ self-hosting alone does NOT provide. Preserve this framing in docs and decisions
 
 ## Repository layout
 ```
-RNR VPN/
+RNR-VPN/
   README.md                 User-facing overview (goals, cost, roadmap, caveats).
   ARCHITECTURE.md           Full design, locked decisions, build-phase checklist.
   CLAUDE.md                 This file - guidance for Claude Code.

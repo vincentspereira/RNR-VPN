@@ -153,7 +153,9 @@ Caveats).
 RNR-VPN/
   README.md                    This file.
   ARCHITECTURE.md              Full design, decisions, build-phase checklist.
+  CLAUDE.md                    Guidance for Claude Code (AI pair-programmer).
   .gitignore                   Keeps secrets / local files out of git.
+  .gitattributes               Enforces LF line endings across Windows + WSL.
   docs/
     MUMBAI-SETUP.md            Plain-language setup guide for the Mumbai helper.
     ISP-PARTNER-REQUEST.md     Exactly what to ask the Mumbai ISP partner for.
